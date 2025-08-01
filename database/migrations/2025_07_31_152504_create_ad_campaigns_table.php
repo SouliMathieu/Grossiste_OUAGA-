@@ -11,7 +11,7 @@ class CreateAdCampaignsTable extends Migration
         Schema::create('ad_campaigns', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->enum('platform', ['google_ads', 'meta_ads', 'both']);
+            $table->enum('platform', ['google_ads', 'meta_ads', 'both'])->default('both');
             $table->enum('status', ['draft', 'active', 'paused', 'completed'])->default('draft');
             $table->json('product_ids'); // IDs des produits ciblés
             $table->decimal('budget', 10, 2);

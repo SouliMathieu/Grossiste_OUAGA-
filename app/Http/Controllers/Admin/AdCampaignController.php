@@ -71,34 +71,93 @@ class AdCampaignController extends Controller
     }
 
     public function launch(AdCampaign $adCampaign)
-    {
-        try {
-            // Ici vous intégrerez les APIs Google Ads et Meta
-            $results = $this->launchCampaignOnPlatforms($adCampaign);
+{
+    try {
+        // Au lieu d'appeler les APIs, générer les liens directs
+        $links = $this->generatePlatformLinks($adCampaign);
 
-            $adCampaign->update([
-                'status' => 'active',
-                'start_date' => now(),
-                'end_date' => now()->addDays($adCampaign->duration_days),
-                'campaign_id_google' => $results['google_id'] ?? null,
-                'campaign_id_meta' => $results['meta_id'] ?? null,
-            ]);
+        $adCampaign->update([
+            'status' => 'draft', // Reste en brouillon car pas encore lancé
+            'start_date' => now(),
+            'end_date' => now()->addDays($adCampaign->duration_days),
+            'performance_data' => [
+                'google_ads_link' => $links['google_ads'] ?? null,
+                'meta_ads_link' => $links['meta_ads'] ?? null,
+                'generated_at' => now()->toISOString()
+            ]
+        ]);
 
-            return redirect()
-                ->route('admin.ad-campaigns.show', $adCampaign)
-                ->with('success', 'Campagne lancée avec succès !');
+        return redirect()
+            ->route('admin.ad-campaigns.show', $adCampaign)
+            ->with('success', 'Liens de campagne générés avec succès ! Utilisez les liens pour créer vos campagnes sur les plateformes.');
 
-        } catch (\Exception $e) {
-            Log::error('Erreur lancement campagne', [
-                'campaign_id' => $adCampaign->id,
-                'error' => $e->getMessage()
-            ]);
+    } catch (\Exception $e) {
+        Log::error('Erreur génération liens campagne', [
+            'campaign_id' => $adCampaign->id,
+            'error' => $e->getMessage()
+        ]);
 
-            return redirect()
-                ->back()
-                ->with('error', 'Erreur lors du lancement : ' . $e->getMessage());
-        }
+        return redirect()
+            ->back()
+            ->with('error', 'Erreur lors de la génération des liens : ' . $e->getMessage());
     }
+}
+
+private function generatePlatformLinks(AdCampaign $campaign)
+{
+    $links = [];
+
+    if (in_array($campaign->platform, ['google_ads', 'both'])) {
+        $links['google_ads'] = $this->generateGoogleAdsLink($campaign);
+    }
+
+    if (in_array($campaign->platform, ['meta_ads', 'both'])) {
+        $links['meta_ads'] = $this->generateMetaAdsLink($campaign);
+    }
+
+    return $links;
+}
+
+private function generateGoogleAdsLink(AdCampaign $campaign)
+{
+    // Générer un lien vers Google Ads avec paramètres pré-remplis
+    $baseUrl = 'https://ads.google.com/aw/campaigns/new';
+
+    $products = $campaign->products();
+    $keywords = $products->pluck('name')->map(function($name) {
+        return strtolower(str_replace(' ', '+', $name));
+    })->implode(',');
+
+    $params = [
+        'campaignType' => 'SEARCH',
+        'keywords' => $keywords,
+        'budget' => $campaign->budget,
+        'location' => 'Burkina Faso',
+        'language' => 'fr'
+    ];
+
+    return $baseUrl . '?' . http_build_query($params);
+}
+
+private function generateMetaAdsLink(AdCampaign $campaign)
+{
+    // Lien vers Meta Business Manager
+    $baseUrl = 'https://business.facebook.com/adsmanager/creation';
+
+    $products = $campaign->products();
+    $productNames = $products->pluck('name')->implode(', ');
+
+    $params = [
+        'objective' => 'CONVERSIONS',
+        'campaign_name' => $campaign->name,
+        'budget' => $campaign->budget,
+        'duration' => $campaign->duration_days,
+        'audience_location' => 'BF', // Code pays Burkina Faso
+        'product_info' => urlencode($productNames)
+    ];
+
+    return $baseUrl . '?' . http_build_query($params);
+}
 
     private function launchCampaignOnPlatforms(AdCampaign $campaign)
     {
